@@ -1,7 +1,8 @@
 # ! -*- coding: utf-8 -*-
-from keras.engine.topology import Layer
+# from keras.engine.topology import Layer
+from tensorflow.python.keras.layers import Layer
 import tensorflow as tf
-import keras.backend as K
+from  tensorflow.python.keras import backend as K
 
 class LayerNormalization(Layer):
     def __init__(self, **kwargs):

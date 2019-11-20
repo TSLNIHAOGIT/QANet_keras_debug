@@ -1,6 +1,6 @@
-from keras.layers import *
-from keras.regularizers import *
-from keras.models import *
+from tensorflow.python.keras.layers import *
+from tensorflow.python.keras.regularizers import *
+from tensorflow.python.keras.models import *
 from layers.context2query_attention import context2query_attention
 from layers.multihead_attention import Attention as MultiHeadAttention
 from layers.position_embedding import Position_Embedding as PositionEmbedding
@@ -10,9 +10,11 @@ from layers.QAoutputBlock import QAoutputBlock
 from layers.BatchSlice import BatchSlice
 from layers.DepthwiseConv1D import DepthwiseConv1D
 from layers.LabelPadding import LabelPadding
-from keras.initializers import VarianceScaling
+from tensorflow.python.keras.initializers import VarianceScaling
 import tensorflow as tf
-import keras.backend as K
+# import keras.backend as K
+from tensorflow.python.keras.layers import Layer
+from  tensorflow.python.keras import backend as K
 
 regularizer = l2(3e-7)
 init = VarianceScaling(scale=1.0, mode='fan_avg', distribution='uniform')
@@ -68,15 +70,17 @@ def feed_forward_block(FeedForward_layers, x, dropout=0.0, l=1., L=1.):
 
 
 def QANet(config, word_mat=None, char_mat=None, cove_model=None):
+    ##数据预处理部分；每个问题对应一个example,同一个context的多个问题，会将context复制成多份与问题对应，然后context 和question
+    ##分别输入到模型，通过计算各种attention进而求得；就像fit_demo那个例子构造的数据一样
     # parameters
-    word_dim = config.word_dim
-    char_dim = config.char_dim
-    cont_limit = config.cont_limit
-    char_limit = config.char_limit
-    ans_limit = config.ans_limit
-    filters = config.filters
-    num_head = config.num_head
-    dropout = config.dropout
+    word_dim = config['word_dim']
+    char_dim = config['char_dim']
+    cont_limit = config['cont_limit']
+    char_limit = config['char_limit']
+    ans_limit = config['ans_limit']
+    filters = config['filters']
+    num_head = config['num_head']
+    dropout = config['dropout']
 
     # Input Embedding Layer
     contw_input_ = Input((None,))
@@ -191,7 +195,10 @@ def QANet(config, word_mat=None, char_mat=None, cove_model=None):
     x_ques = feed_forward_block(Encoder_FeedForward1, x_ques, dropout)
 
     # Context_to_Query_Attention_Layer
+    #(self, output_dim, c_maxlen, q_maxlen, dropout, **kwargs):
+    #x_shape=(batch_size, context_length, 512)
     x = context2query_attention(512, c_maxlen, q_maxlen, dropout)([x_cont, x_ques, c_mask, q_mask])
+
     x = Conv1D(filters, 1,
                kernel_initializer=init,
                kernel_regularizer=regularizer,
@@ -224,6 +231,7 @@ def QANet(config, word_mat=None, char_mat=None, cove_model=None):
                                             kernel_regularizer=regularizer,
                                             activation='linear')])
 
+    ##context_query_attention经过conv1d之后的值就是x
     outputs = [x]
     for i in range(3):
         x = outputs[-1]
@@ -242,6 +250,8 @@ def QANet(config, word_mat=None, char_mat=None, cove_model=None):
                      activation='linear')(x_start)
     x_start = Lambda(lambda x: tf.squeeze(x, axis=-1))(x_start)
     x_start = Lambda(lambda x: mask_logits(x[0], x[1]))([x_start, c_mask])
+
+
     x_start = Lambda(lambda x: K.softmax(x), name='start')(x_start)  # [bs, len]
 
     x_end = Concatenate()([outputs[1], outputs[3]])

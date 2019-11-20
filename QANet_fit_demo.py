@@ -1,5 +1,7 @@
-from keras.optimizers import *
-from keras.initializers import *
+
+import numpy as np
+from tensorflow.python.keras.optimizers import *
+from tensorflow.python.keras.initializers import *
 from QANet_keras import QANet
 
 embedding_matrix = np.random.random((10000, 300))
@@ -35,6 +37,7 @@ cont_limit = 400
 ques_limit = 50
 char_limit = 16
 
+###0-10000之间的某个词模拟所有词的的index
 context_word = np.random.randint(0, 10000, (300, cont_limit))
 question_word = np.random.randint(0, 10000, (300, ques_limit))
 context_char = np.random.randint(0, 96, (300, cont_limit, char_limit))
@@ -44,5 +47,10 @@ end_label = np.random.randint(0, 2, (300, cont_limit))
 start_label_fin = np.argmax(start_label, axis=-1)
 end_label_fin = np.argmax(end_label, axis=-1)
 
+
+'''
+Model(inputs=[contw_input_, quesw_input_, contc_input_, quesc_input_],
+                 outputs=[x_start, x_end, x_start_fin, x_end_fin])
+'''
 model.fit([context_word, question_word, context_char, question_char],
           [start_label, end_label, start_label_fin, end_label_fin], batch_size=8)

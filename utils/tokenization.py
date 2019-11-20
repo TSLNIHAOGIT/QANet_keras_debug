@@ -31,20 +31,29 @@ def printable_text(text):
 
 
 def normalize_text(text):
+    #unicodedata.normalize(“NFD”, text)就会把（é）0xe9变成（e\u0301) 0x65和0x301
     return unicodedata.normalize('NFD', text)
 
 
 def load_vocab(vocab_file, size=int(2.2e6), vec_size=300):
     """Loads a vocabulary file into a dictionary."""
     vocab = collections.OrderedDict()
-    with open(vocab_file, "r") as reader:
-        for line in tqdm(reader, total=size):
+    with open(vocab_file, "r",encoding='utf8') as reader:
+        for index,line in enumerate(tqdm(reader, total=size)):
+            #自己设置只取前10000个词汇向量
+            # if index > 10:
+            #     break
             array = line.split()
+            #取词
             word = "".join(array[0:-vec_size])
             word = normalize_text(word)
+            ##OrderedDict([(',', -1), ('the', -1)])
             vocab[word] = -1
     vocab['--NULL--'] = 0
     vocab['--OOV--'] = 1
+    '''
+    -1 词；0 NULL；1 OOV
+    '''
     return vocab
 
 
@@ -86,21 +95,28 @@ class FullTokenizer(object):
         self.vocab['--NULL--'] = 0
         self.vocab['--OOV--'] = 1
         word_embedding = np.zeros((len(word_count) + 2, vec_size))
+        word_embedding_raw=[]
         index = 2
-        with open(vocab_file, "r") as reader:
-            for line in tqdm(reader, total=size):
-                array = line.split()
-                word = "".join(array[0:-vec_size])
-                word = normalize_text(word)
-                vector = np.array(list(map(float, array[-vec_size:])))
-                if word in word_count:
-                    self.vocab[word] = index
-                    word_embedding[index, ::] = vector
-                    index += 1
-                    word_count.pop(word)
+        with open(vocab_file, "r",encoding='utf8') as reader:
+            # with open('glove.42B.300d.txt', 'a+') as f1:
+
+                for line in tqdm(reader, total=size):
+                    array = line.split()
+                    word = "".join(array[0:-vec_size])
+                    word = normalize_text(word)
+                    vector = np.array(list(map(float, array[-vec_size:])))
+                    if word in word_count:
+                        # ##将词向量过滤重写
+                        # print('过滤词向量')
+                        # f1.write(line)
+                        self.vocab[word] = index
+                        word_embedding[index, ::] = vector
+                        word_embedding_raw.append(line)
+                        index += 1
+                        word_count.pop(word)
         assert index == len(self.vocab)
 
-        return word_embedding
+        return word_embedding,word_embedding_raw
 
     def get_char_embedding(self, char_count, vec_size=64):
         char_embedding = np.zeros((len(char_count) + 2, vec_size))
@@ -142,8 +158,11 @@ class BasicTokenizer(object):
 
     def tokenize(self, text):
         """Tokenizes a piece of text."""
+        #转成unicode字符
         text = convert_to_unicode(text)
+        #去掉无意义字符,将空白字符统一替换为空串
         text = self._clean_text(text)
+        #按照空格分词；中文的不能这样做？
         orig_tokens = whitespace_tokenize(text)
         split_tokens = []
         for token in orig_tokens:

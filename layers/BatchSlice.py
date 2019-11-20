@@ -1,5 +1,7 @@
 # ! -*- coding: utf-8 -*-
-from keras.engine.topology import Layer
+# from keras.engine.topology import Layer
+from tensorflow.python.keras.layers import Layer
+from  tensorflow.python.keras import backend as K
 import tensorflow as tf
 
 class BatchSlice(Layer):

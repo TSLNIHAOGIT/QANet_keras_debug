@@ -21,12 +21,12 @@ parser.add_argument("--train_path", default='./dataset_wordpiece/trainset_wordpi
 parser.add_argument("--dev_path", default='./dataset_wordpiece/devset_wordpiece.pkl', type=str, help="dev path")
 parser.add_argument("--word_embedding", default='./dataset_wordpiece/word_emb_mat.npy', type=str, help="word embedding path")
 parser.add_argument("--char_embedding", default='./dataset_wordpiece/char_emb_mat.npy', type=str, help="char embedding path")
-parser.add_argument("--word_dim", default=300, type=int, help="dim of glove word vector")
-parser.add_argument("--char_dim", default=64, type=int, help="dim of character")
-parser.add_argument("--cont_limit", default=384, type=int, help="context word limit")
-parser.add_argument("--ques_limit", default=64, type=int, help="question word limit")
-parser.add_argument("--char_limit", default=16, type=int, help="char limit in one word")
-parser.add_argument("--ans_limit", default=30, type=int, help="answer word limit")
+parser.add_argument("--word_dim", default=300, type=int, help="dim of glove word vector")##词向量是300d
+parser.add_argument("--char_dim", default=64, type=int, help="dim of character")##字符向量64d
+parser.add_argument("--cont_limit", default=384, type=int, help="context word limit")##上下文长度最大384个词
+parser.add_argument("--ques_limit", default=64, type=int, help="question word limit")##问题长度最大64个词
+parser.add_argument("--char_limit", default=16, type=int, help="char limit in one word")##一个单词的字符长度最大64个字符
+parser.add_argument("--ans_limit", default=30, type=int, help="answer word limit")##答案长度最多30个词
 parser.add_argument("--filters", default=128, type=int, help="filters")
 parser.add_argument("--num_head", default=8, type=int, help="head num for attentionn")
 parser.add_argument("--dropout", default=0.1, type=float, help="dropout rate")

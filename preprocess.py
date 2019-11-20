@@ -1,7 +1,4 @@
-from __future__ import absolute_import
-from __future__ import division
-from __future__ import print_function
-
+# coding=utf-8
 import json
 from pathlib import Path
 from tqdm import tqdm
@@ -144,6 +141,9 @@ class InputFeatures(object):
 
 
 # first preprocess to get tokens
+'''
+
+'''
 def read_squad_examples(input_file, is_training):
     """Read a SQuAD json file into a list of SquadExample."""
     total = 0
@@ -184,8 +184,10 @@ def read_squad_examples(input_file, is_training):
                         raise ValueError("For training, each question should have exactly 0 or 1 answer.")
                     answer = qa["answers"][0]
                     orig_answer_text = answer["text"]
+                    ##按照字符计算从0开始，答案开始的位置
                     answer_offset = answer["answer_start"]
                     answer_length = len(orig_answer_text)
+                    ##转成按照单词计算答案开始的位置
                     start_position = char_to_word_offset[answer_offset]
                     end_position = char_to_word_offset[answer_offset + answer_length - 1]
                     # Only add answers where the text can be exactly recovered from the
@@ -194,6 +196,7 @@ def read_squad_examples(input_file, is_training):
                     #
                     # Note that this means for training mode, every example is NOT
                     # guaranteed to be preserved.
+                    ##doc_tokens是列表里面存放每个单词
                     actual_text = " ".join(doc_tokens[start_position:(end_position + 1)])
                     cleaned_answer_text = " ".join(tokenization.whitespace_tokenize(orig_answer_text))
                     if actual_text.find(cleaned_answer_text) == -1:
@@ -210,6 +213,27 @@ def read_squad_examples(input_file, is_training):
                     start_position=start_position,
                     end_position=end_position)
                 examples.append(example)
+                '''
+                #每个问题构造一个example,同一个上下文中有多个问题，要将上下文复制多次
+                ##所有段落，每个问题成为一个example，
+                [uuid: 5733be284776f41900661182,
+                 question_text: To whom did the Virgin Mary allegedly appear in 1858 in Lourdes France?,
+                doc_tokens: [Architecturally, the school has a Catholic character. Atop the Main Building's gold dome is a golden statue of the Virgin Mary. Immediately in front of the Main Building and facing it, is a copper statue of Christ with arms upraised with the legend "Venite Ad Me Omnes". Next to the Main Building is the Basilica of the Sacred Heart. Immediately behind the basilica is the Grotto, a Marian place of prayer and reflection. It is a replica of the grotto at Lourdes, France where the Virgin Mary reputedly appeared to Saint Bernadette Soubirous in 1858. At the end of the main drive (and in a direct line that connects through 3 statues and the Gold Dome), is a simple, modern stone statue of Mary.], 
+                start_position: 90, 
+                end_position: 92, 
+                
+                uuid: 5733be284776f4190066117f, 
+                question_text: What is in front of the Notre Dame Main Building?, 
+                doc_tokens: [Architecturally, the school has a Catholic character. Atop the Main Building's gold dome is a golden statue of the Virgin Mary. Immediately in front of the Main Building and facing it, is a copper statue of Christ with arms upraised with the legend "Venite Ad Me Omnes". Next to the Main Building is the Basilica of the Sacred Heart. Immediately behind the basilica is the Grotto, a Marian place of prayer and reflection. It is a replica of the grotto at Lourdes, France where the Virgin Mary reputedly appeared to Saint Bernadette Soubirous in 1858. At the end of the main drive (and in a direct line that connects through 3 statues and the Gold Dome), is a simple, modern stone statue of Mary.], 
+                start_position: 32, 
+                end_position: 36,
+                
+                 uuid: 5733be284776f41900661180, 
+                 question_text: The Basilica of the Sacred heart at Notre Dame is beside to which structure?, 
+                 doc_tokens: [Architecturally, the school has a Catholic character. Atop the Main Building's gold dome is a golden statue of the Virgin Mary. Immediately in front of the Main Building and facing it, is a copper statue of Christ with arms upraised with the legend "Venite Ad Me Omnes". Next to the Main Building is the Basilica of the Sacred Heart. Immediately behind the basilica is the Grotto, a Marian place of prayer and reflection. It is a replica of the grotto at Lourdes, France where the Virgin Mary reputedly appeared to Saint Bernadette Soubirous in 1858. At the end of the main drive (and in a direct line that connects through 3 statues and the Gold Dome), is a simple, modern stone statue of Mary.], 
+                 start_position: 49, 
+                 end_position: 51]
+                '''
 
     return examples
 
@@ -222,31 +246,49 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=384, doc_st
     for example_index, example in enumerate(tqdm(examples)):
         uuid = example.uuid
         query_tokens = tokenizer.tokenize(example.question_text)
-
+        #截取最大的询问长度
         if len(query_tokens) > max_query_length:
             query_tokens = query_tokens[0:max_query_length]
 
+        ## 这里是tokenizer之后 第sub_token对应的原始 单词的index；B和.都是对应index=2
+        #<class 'list'>: [0, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 33, 34, 35, 36, 36, 37, 37, 37, 37, 38, 39, 40, 41, 42, 43, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 54, 55, 55, 56, 57, 57, 57, 58, 59, 59, 59, 60, 61, 62, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 72, 73, 74, 74, 75, 76, 76, 77, 78, 79, 80, 81...
         tok_to_orig_index = []
+
+
+        # 原始单词经过token之后，加入all_doc_tokens中单词的总量，一次性增加了B和.所以从2，直接到4，空时为0
+        #<class 'list'>: [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 41, 45, 46, 47, 48, 49, 50, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 64, 66, 67, 70, 71, 74, 75, 76, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 89, 90, 92, 93, 95, 96, 97, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115]
         orig_to_tok_index = []
+
+        ### 这里添加用tokenizer分词之后的tokens
+        #<class 'list'>: ['The', 'Joan', 'B', '.', 'Kroc', 'Institute', 'for', 'International', 'Peace', 'Studies', 'at', 'the', 'University', 'of', 'Notre', 'Dame', 'is', 'dedicated', 'to', 'research', ',', 'education', 'and', 'outreach', 'on', 'the', 'causes', 'of', 'violent', 'conflict', 'and', 'the', 'conditions', 'for', 'sustainable', 'peace', '.', 'It', 'offers', 'PhD', ',', 'Master', "'", 's', ',', 'and', 'undergraduate', 'degrees', 'in', 'peace', 'studies', '.', 'It', 'was', 'founded', 'in', '1986', 'through', 'the', 'donations', 'of', 'Joan', 'B', '.', 'Kroc', ',', 'the', 'wi', 'do', 'w', 'of', 'McDonald', "'", 's', 'owner', 'Ray', 'Kroc', '.', 'The', 'institute', 'was', 'inspired', 'by', 'the', 'vision', 'of', 'the', 'Rev', '.', 'Theodore', 'M', '.', 'Hesburgh', 'CSC', ',', 'President', 'Emeritus', 'of', 'the', 'University'...
         all_doc_tokens = []
+
+        #example.doc_tokens
+        #<class 'list'>: ['The', 'Joan', 'B.', 'Kroc', 'Institute', 'for', 'International', 'Peace', 'Studies', 'at', 'the', 'University', 'of', 'Notre', 'Dame', 'is', 'dedicated', 'to', 'research,', 'education', 'and', 'outreach', 'on', 'the', 'causes', 'of', 'violent', 'conflict', 'and', 'the', 'conditions', 'for', 'sustainable', 'peace.', 'It', 'offers', 'PhD,', "Master's,", 'and', 'undergraduate', 'degrees', 'in', 'peace', 'studies.', 'It', 'was', 'founded', 'in', '1986', 'through', 'the', 'donations', 'of', 'Joan', 'B.', 'Kroc,', 'the', 'widow', 'of', "McDonald's", 'owner', 'Ray', 'Kroc.', 'The', 'institute', 'was', 'inspired', 'by', 'the', 'vision', 'of', 'the', 'Rev.', 'Theodore', 'M.', 'Hesburgh', 'CSC,', 'President', 'Emeritus', 'of', 'the', 'University', 'of', 'Notre', 'Dame.', 'The', 'institute', 'has', 'contributed', 'to', 'international', 'policy', 'discussions', 'about', 'peace', 'building', 'practices.']
         for i, token in enumerate(example.doc_tokens):
             try:
+                #原始单词对应token的index
                 orig_to_tok_index.append(len(all_doc_tokens))
                 sub_tokens = tokenizer.tokenize(token)
                 for sub_token in sub_tokens:
+                    ## 这里是tokenizer之后 第sub_token对应的原始 单词的index
                     tok_to_orig_index.append(i)
+                    ## 这里添加用tokenizer分词之后的tokens
                     all_doc_tokens.append(sub_token)
             except Exception as e:
                 print(e)
                 pass
-
+        ## 下面这一段是得到通过model.tokenizer分词之后的答案所在位置
         tok_start_position = None
         tok_end_position = None
         if is_training:
+            #分词之后答案开始位置
             tok_start_position = orig_to_tok_index[example.start_position]
+            ##结束位置不是在最后一个位置
             if example.end_position < len(example.doc_tokens) - 1:
                 tok_end_position = orig_to_tok_index[example.end_position + 1] - 1
             else:
+                ##？？没看懂，待会再看结束位置是在最后一个位置，len(all_doc_tokens)-1长度表示里面增加过多少次单词，即原始有多少个单词
                 tok_end_position = len(all_doc_tokens) - 1
             (tok_start_position, tok_end_position) = _improve_answer_span(
                 all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
@@ -298,8 +340,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=384, doc_st
                     end_position = tok_end_position - doc_start
 
             features.append(InputFeatures(
-                qid=qid,
-                uuid=uuid,
+                qid=qid,#从0开始，后面每次加1
+                uuid=uuid,#和问题的id对应
                 doc_span_index=doc_span_index,
                 token_to_orig_map=token_to_orig_map,
                 token_is_max_context=token_is_max_context,
@@ -307,6 +349,17 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=384, doc_st
                 ques_tokens=query_tokens,
                 start_position=start_position,
                 end_position=end_position))
+            '''
+                qid=0
+                uuid='5733be284776f41900661182'
+                doc_span_index=0
+                token_to_orig_map=<class 'dict'>: {0: 0, 1: 0, 2: 1, 3: 2, 4: 3, 5: 4, 6: 5, 7: 6, 8: 6, 9: 7, 10: 8, 11: 9, 12: 10, 13: 10, 14: 10, 15: 11, 16: 12, 17: 13, 18: 14, 19: 15, 20: 16, 21: 17, 22: 18, 23: 19, 24: 20, 25: 20, 26: 21, 27: 22, 28: 23, 29: 24, 30: 25, 31: 26, 32: 27, 33: 28, 34: 29, 35: 30, 36: 30, 37: 31, 38: 32, 39: 33, 40: 34, 41: 35, 42: 36, 43: 37, 44: 38, 45: 39, 46: 40, 47: 41, 48: 42, 49: 43, 50: 43, 51: 44, 52: 45, 53: 46, 54: 46, 55: 46, 56: 47, 57: 48, 58: 49, 59: 50, 60: 51, 61: 52, 62: 53, 63: 54, 64: 55, 65: 56, 66: 57, 67: 58, 68: 58, 69: 59, 70: 60, 71: 61, 72: 62, 73: 63, 74: 64, 75: 65, 76: 65, 77: 66, 78: 67, 79: 68, 80: 69, 81: 70, 82: 71, 83: 72, 84: 72, 85: 73, 86: 74, 87: 75, 88: 76, 89: 77, 90: 78, 91: 79, 92: 80, 93: 81, 94: 81, 95: 82, 96: 83, 97: 84, 98: 85, 99: 86...,
+                token_is_max_context=<class 'dict'>: {0: True, 1: True, 2: True, 3: True, 4: True, 5: True, 6: True, 7: True, 8: True, 9: True, 10: True, 11: True, 12: True, 13: True, 14: True, 15: True, 16: True, 17: True, 18: True, 19: True, 20: True, 21: True, 22: True, 23: True, 24: True, 25: True, 26: True, 27: True, 28: True, 29: True, 30: True, 31: True, 32: True, 33: True, 34: True, 35: True, 36: True, 37: True, 38: True, 39: True, 40: True, 41: True, 42: True, 43: True, 44: True, 45: True, 46: True, 47: True, 48: True, 49: True, 50: True, 51: True, 52: True, 53: True, 54: True, 55: True, 56: True, 57: True, 58: True, 59: True, 60: True, 61: True, 62: True, 63: True, 64: True, 65: True, 66: True, 67: True, 68: True, 69: True, 70: True, 71: True, 72: True, 73: True, 74: True, 75: True, 76: True, 77: True, 78: True, 79: True, 80: True, 81: True, 82: True, 83: True, 84: True, 85: True, 86: True, 87: True, 88: True, 89: True, 90: True, 91: True, 92: True, 93: True, 94: True, 95: True, 96: True, 97: True, 98: True, 99: True...
+                doc_tokens=<class 'list'>: ['Architecturally', ',', 'the', 'school', 'has', 'a', 'Catholic', 'character', '.', 'Atop', 'the', 'Main', 'Building', "'", 's', 'gold', 'dome', 'is', 'a', 'golden', 'statue', 'of', 'the', 'Virgin', 'Mary', '.', 'Immediately', 'in', 'front', 'of', 'the', 'Main', 'Building', 'and', 'facing', 'it', ',', 'is', 'a', 'copper', 'statue', 'of', 'Christ', 'with', 'arms', 'upraised', 'with', 'the', 'legend', '"', 'Venite', 'Ad', 'Me', 'Omnes', '"', '.', 'Next', 'to', 'the', 'Main', 'Building', 'is', 'the', 'Basilica', 'of', 'the', 'Sacred', 'Heart', '.', 'Immediately', 'behind', 'the', 'basilica', 'is', 'the', 'Grotto', ',', 'a', 'Marian', 'place', 'of', 'prayer', 'and', 'reflection', '.', 'It', 'is', 'a', 'replica', 'of', 'the', 'grotto', 'at', 'Lourdes', ',', 'France', 'where', 'the', 'Virgin', 'Mary'...
+                ques_tokens=<class 'list'>: ['To', 'whom', 'did', 'the', 'Virgin', 'Mary', 'allegedly', 'appear', 'in', '1858', 'in', 'Lourdes', 'France', '?']
+                start_position=103
+                end_position=105
+            '''
 
             qid += 1
 
@@ -337,10 +390,10 @@ def token_process(features, tokenizer, vocab_file):
     print('CHAR num :', len(char_counter))
 
     # 过滤新vocab，将word_counter中未出现的从vocab中去除，出现过的赋值对应的下标
-    word_embedding = tokenizer.get_word_embedding(word_counter, vocab_file, size=int(2.2e6), vec_size=300)
+    word_embedding ,word_embedding_raw= tokenizer.get_word_embedding(word_counter, vocab_file, size=int(2.2e6), vec_size=300)
     char_embedding = tokenizer.get_char_embedding(char_counter, vec_size=64)
 
-    return word_embedding, char_embedding, tokenizer
+    return word_embedding, word_embedding_raw,char_embedding, tokenizer
 
 
 def build_features(features, tokenizer, save_path, max_seq_length=384, max_query_length=64, char_limit=16, is_training=True):
@@ -409,6 +462,117 @@ def build_features(features, tokenizer, save_path, max_seq_length=384, max_query
             'y_start': y1s,
             'y_end': y2s}
     print('save to', save_path, len(qids), 'features')
+    '''
+    
+    <class 'dict'>: {'qid': array([0, 1, 2, 3, 4]), 'context_id': array([[1, 2, 3, ..., 0, 0, 0],
+       [1, 2, 3, ..., 0, 0, 0],
+       [1, 2, 3, ..., 0, 0, 0],
+       [1, 2, 3, ..., 0, 0, 0],
+       [1, 2, 3, ..., 0, 0, 0]]), 'question_id': array([[ 6, 48, 24,  3,  1,  1, 59, 45,  9, 63,  9,  1,  1, 19,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+       [ 1, 11,  9, 33,  7,  3,  1,  1, 35,  1, 19,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+       [ 3, 64,  7,  3,  1, 34, 18,  1,  1, 11, 57,  6, 22, 43, 19,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+       [ 1, 11,  3, 65, 18,  1,  1, 19,  0,  0,  0,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0],
+       [ 1, 55, 16, 28,  7,  3, 35,  1, 18,  1,  1, 19,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+         0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0]]), 'context_char_id': array([[[ 2,  3,  4, ..., 11, 12,  0],
+        [13,  0,  0, ...,  0,  0,  0],
+        [ 7,  5,  8, ...,  0,  0,  0],
+        ...,
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0]],
+
+       [[ 2,  3,  4, ..., 11, 12,  0],
+        [13,  0,  0, ...,  0,  0,  0],
+        [ 7,  5,  8, ...,  0,  0,  0],
+        ...,
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0]],
+
+       [[ 2,  3,  4, ..., 11, 12,  0],
+        [13,  0,  0, ...,  0,  0,  0],
+        [ 7,  5,  8, ...,  0,  0,  0],
+        ...,
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0]],
+
+       [[ 2,  3,  4, ..., 11, 12,  0],
+        [13,  0,  0, ...,  0,  0,  0],
+        [ 7,  5,  8, ...,  0,  0,  0],
+        ...,
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0]],
+
+       [[ 2,  3,  4, ..., 11, 12,  0],
+        [13,  0,  0, ...,  0,  0,  0],
+        [ 7,  5,  8, ...,  0,  0,  0],
+        ...,
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0]]]), 'question_char_id': array([[[48, 15,  0, ...,  0,  0,  0],
+        [29,  5, 15, ...,  0,  0,  0],
+        [22,  6, 22, ...,  0,  0,  0],
+        ...,
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0]],
+
+       [[50,  5, 10, ...,  0,  0,  0],
+        [ 6, 14,  0, ...,  0,  0,  0],
+        [ 6, 20,  0, ...,  0,  0,  0],
+        ...,
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0]],
+
+       [[48,  5,  8, ...,  0,  0,  0],
+        [21, 10, 14, ...,  0,  0,  0],
+        [15, 26,  0, ...,  0,  0,  0],
+        ...,
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0]],
+
+       [[50,  5, 10, ...,  0,  0,  0],
+        [ 6, 14,  0, ...,  0,  0,  0],
+        [ 7,  5,  8, ...,  0,  0,  0],
+        ...,
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0]],
+
+       [[50,  5, 10, ...,  0,  0,  0],
+        [14,  6,  7, ...,  0,  0,  0],
+        [15, 20,  0, ...,  0,  0,  0],
+        ...,
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0],
+        [ 0,  0,  0, ...,  0,  0,  0]]]), 'y_start': array([[0., 0., 0., ..., 0., 0., 0.],
+       [0., 0., 0., ..., 0., 0., 0.],
+       [0., 0., 0., ..., 0., 0., 0.],
+       [0., 0., 0., ..., 0., 0., 0.],
+       [0., 0., 0., ..., 0., 0., 0.]], dtype=float32), 'y_end': array([[0., 0., 0., ..., 0., 0., 0.],
+       [0., 0., 0., ..., 0., 0., 0.],
+       [0., 0., 0., ..., 0., 0., 0.],
+       [0., 0., 0., ..., 0., 0., 0.],
+       [0., 0., 0., ..., 0., 0., 0.]], dtype=float32)}
+    '''
     with open(save_path, 'wb') as f:
         pickle.dump(meta, f)
 
@@ -416,9 +580,10 @@ def build_features(features, tokenizer, save_path, max_seq_length=384, max_query
 if __name__ == '__main__':
 
     # Load tokenizer
-    tokenizer = tokenization.FullTokenizer(vocab_file='original_data/glove.840B.300d.txt', do_lower_case=False)
-    train_examples = read_squad_examples(input_file='original_data/train-v1.1.json', is_training=True)
-    dev_examples = read_squad_examples(input_file='original_data/dev-v1.1.json', is_training=False)
+    tokenizer = tokenization.FullTokenizer(vocab_file='glove.42B.300d.txt1', do_lower_case=False)
+
+    train_examples = read_squad_examples(input_file='original_data/train_sample.json', is_training=True)
+    dev_examples = read_squad_examples(input_file='original_data/train_sample.json', is_training=False)
 
     
 
@@ -430,9 +595,10 @@ if __name__ == '__main__':
     total_features = []
     total_features.extend(train_features)
     total_features.extend(dev_features)
-    word_embedding, char_embedding, tokenizer = token_process(total_features, tokenizer, 'original_data/glove.840B.300d.txt')
-
-    
+    word_embedding, word_embedding_raw,char_embedding, tokenizer = token_process(total_features, tokenizer, 'glove.42B.300d.txt1')
+    # with open('glove.42B.300d.txt','w') as f:
+    #     json.dump(word_embedding_raw,f,indent=2)
+    print('保存完毕')
     print(word_embedding.shape)
     print(len(tokenizer.vocab))
     print(char_embedding.shape)
@@ -445,10 +611,10 @@ if __name__ == '__main__':
     np.save('./dataset_wordpiece/word_emb_mat.npy', word_embedding)
     np.save('./dataset_wordpiece/char_emb_mat.npy', char_embedding)
     
-    with open('./dataset_wordpiece/dev_examples.pkl', 'wb') as p:
-        pickle.dump(dev_examples, p)
-    with open('./dataset_wordpiece/dev_features.pkl', 'wb') as p:
-        pickle.dump(dev_features, p)
+    # with open('./dataset_wordpiece/dev_examples.pkl', 'wb') as p:
+    #     pickle.dump(dev_examples, p)
+    # with open('./dataset_wordpiece/dev_features.pkl', 'wb') as p:
+    #     pickle.dump(dev_features, p)
 
 
     build_features(train_features, tokenizer, './dataset_wordpiece/trainset_wordpiece.pkl', is_training=True)

@@ -1,4 +1,5 @@
-from keras.engine.topology import Layer
+# from keras.engine.topology import Layer
+from tensorflow.python.keras.layers import Layer
 import tensorflow as tf
 import math
 
