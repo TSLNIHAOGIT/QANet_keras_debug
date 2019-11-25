@@ -156,7 +156,6 @@ flags.DEFINE_float(
 
 class SquadExample(object):
   """A single training/test example for simple sequence classification.
-
      For examples without an answer, the start and end position are -1.
   """
 
@@ -328,7 +327,7 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length,
       for sub_token in sub_tokens:
         tok_to_orig_index.append(i)
         all_doc_tokens.append(sub_token)
-    ## 下面这一段是得到通过model.tokenizer分词之后的答案所在位置
+
     tok_start_position = None
     tok_end_position = None
     if is_training and example.is_impossible:

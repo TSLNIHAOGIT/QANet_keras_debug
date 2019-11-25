@@ -161,6 +161,9 @@ def read_squad_examples(input_file, is_training):
             paragraph_text = paragraph["context"]
             doc_tokens = []
             char_to_word_offset = []
+            '''
+            char_to_word_offset 用于根据答案和答案开始位置确定答案的起始位置(即模型的输出)
+            '''
             prev_is_whitespace = True
             for c in paragraph_text:
                 if is_whitespace(c):
@@ -240,7 +243,14 @@ def read_squad_examples(input_file, is_training):
 
 def convert_examples_to_features(examples, tokenizer, max_seq_length=384, doc_stride=128, max_query_length=64, is_training=True):
     """Loads a data file into a list of `InputBatch`s."""
-
+    '''
+	max_seq_length: 最大序列长度，长度小于该值得序列将进行padding处理，大于该值得序列将进行分段
+    doc_stride: 文档滑动窗口，当需要对序列分段时，相邻分段序列的重叠长度??
+    max_query_length: 最大问题长度，长度大于该值得问题将被截断
+    num_epochs: 训练的epoch数
+    learning_rate: 学习率
+    
+    '''
     qid = 0
     features = []
     for example_index, example in enumerate(tqdm(examples)):
@@ -251,15 +261,20 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=384, doc_st
             query_tokens = query_tokens[0:max_query_length]
 
         ## 这里是tokenizer之后 第sub_token对应的原始 单词的index；B和.都是对应index=2
+        ##通过这个找出sub_token对应的原始token的index
         #<class 'list'>: [0, 1, 2, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 33, 34, 35, 36, 36, 37, 37, 37, 37, 38, 39, 40, 41, 42, 43, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 54, 55, 55, 56, 57, 57, 57, 58, 59, 59, 59, 60, 61, 62, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 72, 73, 74, 74, 75, 76, 76, 77, 78, 79, 80, 81...
         tok_to_orig_index = []
 
 
         # 原始单词经过token之后，加入all_doc_tokens中单词的总量，一次性增加了B和.所以从2，直接到4，空时为0
+        #没理解，这个应该是index？？
+        ##orig_to_tok_index[example.start_position]
+        ##假设原始分词（未sub_token）的开始位置是3即"Kroc",那么orig_to_tok_index[3]=4可得到sub_tok之后的位置tok_start_position
+        ##sub_token之后会有位置的变动，通过这个记录开始和结束位置的变动
         #<class 'list'>: [0, 1, 2, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31, 32, 33, 34, 35, 37, 38, 39, 41, 45, 46, 47, 48, 49, 50, 52, 53, 54, 55, 56, 57, 58, 59, 60, 61, 62, 64, 66, 67, 70, 71, 74, 75, 76, 78, 79, 80, 81, 82, 83, 84, 85, 86, 87, 89, 90, 92, 93, 95, 96, 97, 98, 99, 100, 101, 102, 104, 105, 106, 107, 108, 109, 110, 111, 112, 113, 114, 115]
         orig_to_tok_index = []
 
-        ### 这里添加用tokenizer分词之后的tokens
+        ###  从example.doc_tokens再次分词之后，这里添加用tokenizer分词之后的tokens
         #<class 'list'>: ['The', 'Joan', 'B', '.', 'Kroc', 'Institute', 'for', 'International', 'Peace', 'Studies', 'at', 'the', 'University', 'of', 'Notre', 'Dame', 'is', 'dedicated', 'to', 'research', ',', 'education', 'and', 'outreach', 'on', 'the', 'causes', 'of', 'violent', 'conflict', 'and', 'the', 'conditions', 'for', 'sustainable', 'peace', '.', 'It', 'offers', 'PhD', ',', 'Master', "'", 's', ',', 'and', 'undergraduate', 'degrees', 'in', 'peace', 'studies', '.', 'It', 'was', 'founded', 'in', '1986', 'through', 'the', 'donations', 'of', 'Joan', 'B', '.', 'Kroc', ',', 'the', 'wi', 'do', 'w', 'of', 'McDonald', "'", 's', 'owner', 'Ray', 'Kroc', '.', 'The', 'institute', 'was', 'inspired', 'by', 'the', 'vision', 'of', 'the', 'Rev', '.', 'Theodore', 'M', '.', 'Hesburgh', 'CSC', ',', 'President', 'Emeritus', 'of', 'the', 'University'...
         all_doc_tokens = []
 
@@ -285,11 +300,20 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=384, doc_st
             #分词之后答案开始位置
             tok_start_position = orig_to_tok_index[example.start_position]
             ##结束位置不是在最后一个位置
+
+            ##是这样子的
+            # 例如：ori[end_position] = "unaffable", tok = [..., "un", "##aff", "##able", ...]
+            # orig_to_tok_index[end_position] 位置在 tok 中对应的是 "un"
+            # orig_to_tok_index[end_position + 1] - 1 位置在 tok 中对应的是 "##able"
             if example.end_position < len(example.doc_tokens) - 1:
+
+                ##去token之后的end_position,如##able
                 tok_end_position = orig_to_tok_index[example.end_position + 1] - 1
             else:
-                ##？？没看懂，待会再看结束位置是在最后一个位置，len(all_doc_tokens)-1长度表示里面增加过多少次单词，即原始有多少个单词
+                ##结束位置在原文中处在最后，那么sub_token之后仍然在最后，即all_doc_tokens最后一个位置
                 tok_end_position = len(all_doc_tokens) - 1
+
+                ##之后看怎么提高的？？
             (tok_start_position, tok_end_position) = _improve_answer_span(
                 all_doc_tokens, tok_start_position, tok_end_position, tokenizer,
                 example.orig_answer_text)
@@ -300,27 +324,55 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=384, doc_st
         _DocSpan = collections.namedtuple(  # pylint: disable=invalid-name
             "DocSpan", ["start", "length"])
 
+        ##记录一个doc_token移动了几次，就有几个doc_span,里面是一个集合
         doc_spans = []
         start_offset = 0
+        ##all_doc_tokens遍历每个词直到结束
         while start_offset < len(all_doc_tokens):
+            #总长度减去开始位置之后剩余的长度
             length = len(all_doc_tokens) - start_offset
             if length > max_seq_length:
                 length = max_seq_length
             doc_spans.append(_DocSpan(start=start_offset, length=length))
             if start_offset + length == len(all_doc_tokens):
                 break
+
+            ##每一次移动(步长和剩余长度)两者最小值达到新的开始位置
             start_offset += min(length, doc_stride)
 
+        ### 对于每个窗口 doc_span，构建拼接的输入 [['CLS'] query_tokens ['SEP'] doc_span_text ['SEP']]
         for (doc_span_index, doc_span) in enumerate(doc_spans):
+            ##每一个span下面三个都要置为空，重新来
             doc_tokens = []
             token_to_orig_map = {}
             token_is_max_context = {}
+            '''
+             原始bert内容如下
+             ##会拼接query内容：对于每个窗口 doc_span，构建拼接的输入 [['CLS'] query_tokens ['SEP'] doc_span_text ['SEP']]
+             tokens = []
+              token_to_orig_map = {}
+              token_is_max_context = {}
+              segment_ids = []
+              # '[CLS]' query '[SEP]'
+              tokens.append("[CLS]")
+              segment_ids.append(0)
+              for token in query_tokens:
+                tokens.append(token)
+                segment_ids.append(0)
+              tokens.append("[SEP]")
+              segment_ids.append(0)
+            '''
 
+            ##遍历当前doc_span中的每一个tocken
             for i in range(doc_span.length):
-                split_token_index = doc_span.start + i
+                split_token_index = doc_span.start + i# # 当前 token 在 all_doc_tokens[] 中的位置
+                ##通过这个找出当前token对应的原始token（未sub_token）的index，并保存到token_to_orig_map
+                ##如当前token index=142,计算可得对应原始token的index=123;len(doc_tokens)不断变化
                 token_to_orig_map[len(doc_tokens)] = tok_to_orig_index[split_token_index]
                 is_max_context = _check_is_max_context(doc_spans, doc_span_index, split_token_index)
-                token_is_max_context[len(doc_tokens)] = is_max_context
+                token_is_max_context[len(doc_tokens)] = is_max_context## 当前 span 是否是当前 token 的最佳 context
+                ##将这些词存储到doc_tokens里面
+                #<class 'list'>: ['Architecturally', ',', 'the', 'school', 'has', 'a', 'Catholic', 'character', '.', 'Atop', 'the', 'Main', 'Building', "'", 's', 'gold', 'dome', 'is', 'a', 'golden', 'statue', 'of', 'the', 'Virgin', 'Mary', '.', 'Immediately', 'in', 'front', 'of', 'the', 'Main', 'Building', 'and', 'facing', 'it', ',', 'is', 'a', 'copper', 'statue', 'of', 'Christ', 'with', 'arms', 'upraised', 'with', 'the', 'legend', '"', 'Venite', 'Ad', 'Me', 'Omnes', '"', '.', 'Next', 'to', 'the', 'Main', 'Building', 'is', 'the', 'Basilica', 'of', 'the', 'Sacred', 'Heart', '.', 'Immediately', 'behind', 'the', 'basilica', 'is', 'the', 'Grotto', ',', 'a', 'Marian', 'place', 'of', 'prayer', 'and', 'reflection', '.', 'It', 'is', 'a', 'replica', 'of', 'the', 'grotto', 'at', 'Lourdes', ',', 'France', 'where', 'the', 'Virgin', 'Mary'...
                 doc_tokens.append(all_doc_tokens[split_token_index])
 
             start_position = None
@@ -331,6 +383,8 @@ def convert_examples_to_features(examples, tokenizer, max_seq_length=384, doc_st
                 doc_start = doc_span.start
                 doc_end = doc_span.start + doc_span.length - 1
                 out_of_span = False
+
+                ## # answer 没有被完整包含在当前 span 中，也就是span时答案被截断了
                 if not (tok_start_position >= doc_start and tok_end_position <= doc_end):
                     out_of_span = True
                 if out_of_span:
